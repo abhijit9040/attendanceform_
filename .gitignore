@@ -1,0 +1,63 @@
+# Node Modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# dotenv environment variables
+.env
+.env.local
+.env.*.local
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Build output
+dist/
+build/
+.out/
+.next/
+.cache/
+.temp/
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# IDE files
+.vscode/
+.idea/
+
+# Cache
+.npm/
+.yarn/
+.pnp.* 
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Generated files
+*.pem
+*.pid
+*.seed
+*.key
+
+# React Native / Expo
+.expo/
+.expo-shared/
+android/
+ios/
+
+# Misc
+*.swp
+*.swo
+*.bak
+*.tmp
