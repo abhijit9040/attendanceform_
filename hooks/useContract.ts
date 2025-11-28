@@ -2,19 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi"
-import { parseEther, formatEther } from "viem"
 import { contractABI, contractAddress } from "@/lib/contract"
 
-export interface WillData {
-  recipient: string
-  amount: string
-  claimed: boolean
-}
-
 export interface ContractData {
-  contractBalance: string
-  myWillsCount: number
-  wills: WillData[]
+  contractOwner: string | null
+  attendeeCount: number
+  attendees: string[]
+  myAttendanceTimestamp: number | null
 }
 
 export interface ContractState {
@@ -27,100 +21,142 @@ export interface ContractState {
 }
 
 export interface ContractActions {
-  createWill: (recipient: string, amount: string) => Promise<void>
-  claimWill: (owner: string, index: number) => Promise<void>
+  markAttendance: () => Promise<void>
+  clearAttendance: () => Promise<void>
+  refetch: () => Promise<void>
 }
 
-export const useWillContract = () => {
+export const useAttendanceContract = () => {
   const { address } = useAccount()
   const [isLoading, setIsLoading] = useState(false)
-  const [wills, setWills] = useState<WillData[]>([])
+  const [attendees, setAttendees] = useState<string[]>([])
 
-  const { data: contractBalance, refetch: refetchBalance } = useReadContract({
+  const {
+    data: contractOwner,
+    refetch: refetchOwner
+  } = useReadContract({
     address: contractAddress,
     abi: contractABI,
-    functionName: "getContractBalance",
+    functionName: "owner",
   })
 
-  const { data: myWillsCount, refetch: refetchWillsCount } = useReadContract({
+  const {
+    data: attendeeCount,
+    refetch: refetchAttendeeCount
+  } = useReadContract({
     address: contractAddress,
     abi: contractABI,
-    functionName: "getMyWillsCount",
+    functionName: "getAttendeeCount",
+  })
+
+  const {
+    data: allAttendees,
+    refetch: refetchAllAttendees
+  } = useReadContract({
+    address: contractAddress,
+    abi: contractABI,
+    functionName: "getAllAttendees",
+  })
+
+  const {
+    data: myTimestamp,
+    refetch: refetchMyTimestamp
+  } = useReadContract({
+    address: contractAddress,
+    abi: contractABI,
+    functionName: "getAttendanceTimestamp",
+    args: [address as `0x${string}`],
     query: {
       enabled: !!address,
-    },
-  })
+    } as any,
+  } as any)
 
-  const { writeContractAsync, data: hash, error, isPending } = useWriteContract()
+  const { writeContractAsync, data: hash, error, isLoading: isWritePending } = useWriteContract()
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  })
+    hash: hash as any,
+  } as any)
+
+  useEffect(() => {
+    if (allAttendees && Array.isArray(allAttendees)) {
+      setAttendees((allAttendees as string[]).map((a) => (a as string)))
+    }
+  }, [allAttendees])
 
   useEffect(() => {
     if (isConfirmed) {
-      refetchBalance()
-      refetchWillsCount()
+      // refresh reads
+      refetchOwner()
+      refetchAttendeeCount()
+      refetchAllAttendees()
+      if (address) refetchMyTimestamp()
     }
-  }, [isConfirmed, refetchBalance, refetchWillsCount])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed])
 
-  const createWill = async (recipient: string, amount: string) => {
-    if (!recipient || !amount) return
-
+  const markAttendance = async () => {
     try {
       setIsLoading(true)
       await writeContractAsync({
         address: contractAddress,
         abi: contractABI,
-        functionName: "createWill",
-        args: [recipient as `0x${string}`],
-        value: parseEther(amount),
+        functionName: "markAttendance",
+        args: [],
       })
     } catch (err) {
-      console.error("Error creating will:", err)
+      console.error("Error marking attendance:", err)
       throw err
     } finally {
       setIsLoading(false)
     }
   }
 
-  const claimWill = async (owner: string, index: number) => {
-    if (!owner && !address) return
-
+  const clearAttendance = async () => {
     try {
       setIsLoading(true)
       await writeContractAsync({
         address: contractAddress,
         abi: contractABI,
-        functionName: "claimWill",
-        args: [(owner || address) as `0x${string}` , BigInt(index)],
+        functionName: "clearAttendance",
+        args: [],
       })
     } catch (err) {
-      console.error("Error claiming will:", err)
+      console.error("Error clearing attendance:", err)
       throw err
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const refetch = async () => {
+    await Promise.all([
+      refetchOwner?.(),
+      refetchAttendeeCount?.(),
+      refetchAllAttendees?.(),
+      address ? refetchMyTimestamp?.() : Promise.resolve(),
+    ])
   }
 
   const data: ContractData = {
-    contractBalance: contractBalance ? formatEther(contractBalance as bigint) : "0",
-    myWillsCount: myWillsCount ? Number(myWillsCount as bigint) : 0,
-    wills,
+    contractOwner: contractOwner ? (contractOwner as string) : null,
+    attendeeCount: attendeeCount ? Number(attendeeCount as bigint) : attendees.length,
+    attendees,
+    myAttendanceTimestamp: myTimestamp ? Number(myTimestamp as bigint) : null,
   }
 
   const actions: ContractActions = {
-    createWill,
-    claimWill,
+    markAttendance,
+    clearAttendance,
+    refetch,
   }
 
   const state: ContractState = {
-    isLoading: isLoading || isPending || isConfirming,
-    isPending,
-    isConfirming,
-    isConfirmed,
-    hash,
-    error,
+    isLoading: isLoading || Boolean(isWritePending) || Boolean(isConfirming),
+    isPending: Boolean(isWritePending),
+    isConfirming: Boolean(isConfirming),
+    isConfirmed: Boolean(isConfirmed),
+    hash: hash as `0x${string}` | undefined,
+    error: error as Error | null,
   }
 
   return {
@@ -129,3 +165,5 @@ export const useWillContract = () => {
     state,
   }
 }
+
+export default useAttendanceContract
